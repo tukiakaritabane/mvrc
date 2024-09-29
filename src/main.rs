@@ -2,60 +2,71 @@
 
 use std::thread::sleep;
 use std::time::Duration;
+use std::fs;
 use windows::{
     core::*,
-    Win32::Foundation::*,
     Win32::UI::WindowsAndMessaging::*,
 };
 
-fn main() -> Result<()> {
-    const MIN_WIDTH: i32 = 50;
-    const MIN_HEIGHT: i32 = 50;
-    const MAX_WIDHT: i32 = 1380;
-    const MAX_HEIGHT: i32 = 1040;
-    const SLEEP_DURATION: u64 = 30_000;
+// ウィンドウのサイズを保持する構造体
+struct WindowSize {
+    min: (i32, i32),
+    max: (i32, i32),
+}
 
+// ウィンドウの状態を保持する構造体
+struct WindowState {
+    state_file: &'static str,
+    min_mode: &'static str,
+    max_mode: &'static str,
+}
+
+// 定数定義
+const SLEEP_DURATION: Duration = Duration::from_secs(30);
+
+// 構造体のインスタンスを生成
+const WINDOW_SIZE: WindowSize = WindowSize {
+    min: (50, 50),
+    max: (1380, 1040),
+};
+
+const WINDOW_STATE: WindowState = WindowState {
+    state_file: "mvrc.dat",
+    min_mode: "1",
+    max_mode: "0",
+};
+
+fn main() -> Result<()> {
+    // VRChatのウィンドウを探す
     let window = loop {
         unsafe {
-            // ウィンドウを探す
             if let Ok(window) = FindWindowW(w!("UnityWndClass"), w!("VRChat")) {
-                // 見つかった場合はループを抜ける
                 break window;
             }
         }
-        // 見つからなかった場合、少し待機して再試行
-        sleep(Duration::from_millis(SLEEP_DURATION));
+        sleep(SLEEP_DURATION);
     };
 
+    // 現在のモードに基づいてウィンドウサイズを設定
+    let is_min_mode = fs::read_to_string(WINDOW_STATE.state_file).unwrap_or_default() == WINDOW_STATE.min_mode;
+    let (width, height) = if is_min_mode { WINDOW_SIZE.min } else { WINDOW_SIZE.max };
+
+    // ウィンドウの位置とサイズを設定
     unsafe {
-        // 現在のウィンドウ位置とサイズを取得
-        let mut rect = RECT::default();
-        GetWindowRect(window, &mut rect)?;
-
-        let current_width = rect.right - rect.left;
-        let current_height = rect.bottom - rect.top;
-
-        let (new_width, new_height) = if current_width == MIN_WIDTH && current_height == MIN_HEIGHT {
-            // 50x50 の場合、1380x1040 に変更
-            (MAX_WIDHT, MAX_HEIGHT)
-        } else if current_width == MAX_WIDHT && current_height == MAX_HEIGHT {
-            // 1380x1040 の場合、50x50 に変更
-            (MIN_WIDTH, MIN_HEIGHT)
-        } else {
-            // それ以外の場合は変更しない
-            (current_width, current_height)
-        };
-
-        // ウィンドウサイズと位置を変更 (左上を (0, 0) に設定)
         SetWindowPos(
             window,
             HWND_TOP,
             0,
             0,
-            new_width,
-            new_height,
+            width,
+            height,
             SWP_NOZORDER | SWP_NOACTIVATE,
         )?;
     }
+
+    // 新しい状態を書き込む
+    let state_to_write = if is_min_mode { WINDOW_STATE.max_mode } else { WINDOW_STATE.min_mode };
+    fs::write(WINDOW_STATE.state_file, state_to_write)?;
+
     Ok(())
 }
