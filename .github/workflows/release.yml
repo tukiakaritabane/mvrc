@@ -39,11 +39,6 @@ jobs:
           command: build
           args: --release --target ${{ matrix.job.target }}
 
-      - name: Rename artifacts
-        shell: bash
-        run: |
-          mv target/${{ matrix.job.target }}/release/${{ env.PROJECT_NAME }}${{ matrix.job.extension }}
-
       - name: Release
         uses: softprops/action-gh-release@v1
         env:
